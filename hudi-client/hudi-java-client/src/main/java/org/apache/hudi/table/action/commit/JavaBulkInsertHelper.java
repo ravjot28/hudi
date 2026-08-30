@@ -26,6 +26,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.execution.JavaLazyInsertIterable;
+import org.apache.hudi.execution.bulkinsert.JavaBucketIndexBulkInsertPartitioner;
 import org.apache.hudi.execution.bulkinsert.JavaBulkInsertInternalPartitionerFactory;
 import org.apache.hudi.io.CreateHandleFactory;
 import org.apache.hudi.io.WriteHandleFactory;
@@ -77,7 +78,7 @@ public class JavaBulkInsertHelper<T, R> extends BaseBulkInsertHelper<T, List<Hoo
           config.shouldAllowMultiWriteOnSameInstant());
     }
 
-    BulkInsertPartitioner partitioner = userDefinedBulkInsertPartitioner.orElseGet(() -> JavaBulkInsertInternalPartitionerFactory.get(config.getBulkInsertSortMode()));
+    BulkInsertPartitioner partitioner = userDefinedBulkInsertPartitioner.orElseGet(() -> JavaBulkInsertInternalPartitionerFactory.get(table, config));
 
     // write new files
     List<WriteStatus> writeStatuses = bulkInsert(inputRecords, instantTime, table, config, performDedupe, partitioner, false,
@@ -111,6 +112,28 @@ public class JavaBulkInsertHelper<T, R> extends BaseBulkInsertHelper<T, List<Hoo
     final List<HoodieRecord<T>> repartitionedRecords =
         (List<HoodieRecord<T>>) partitioner.repartitionRecords(dedupedRecords, targetParallelism);
 
+    List<WriteStatus> writeStatuses = new ArrayList<>();
+
+    if (partitioner instanceof JavaBucketIndexBulkInsertPartitioner) {
+      // Bucket index bulk_insert needs one write handle per (partition path, bucket) group -- each with its
+      // own fileId and write handle factory (append to an existing bucket's log file, or create a new base
+      // file for a brand-new bucket) -- unlike the other partitioners below, which write every record into
+      // a single file group since there is only one data partition for the Java engine.
+      JavaBucketIndexBulkInsertPartitioner<T> bucketPartitioner = (JavaBucketIndexBulkInsertPartitioner<T>) partitioner;
+      List<List<HoodieRecord<T>>> recordsByGroup = bucketPartitioner.getRecordsByGroup();
+      for (int groupIdx = 0; groupIdx < recordsByGroup.size(); groupIdx++) {
+        List<HoodieRecord<T>> groupRecords = recordsByGroup.get(groupIdx);
+        if (groupRecords.isEmpty()) {
+          continue;
+        }
+        new JavaLazyInsertIterable<>(groupRecords.iterator(), partitioner.arePartitionRecordsSorted(),
+            config, instantTime, table, bucketPartitioner.getFileIdPfx(groupIdx), table.getTaskContextSupplier(),
+            (WriteHandleFactory) bucketPartitioner.getWriteHandleFactory(groupIdx).orElse(writeHandleFactory))
+            .forEachRemaining(writeStatuses::addAll);
+      }
+      return writeStatuses;
+    }
+
     String fileIdPrefix;
     if (partitioner instanceof JavaHoodieMetadataBulkInsertPartitioner) {
       fileIdPrefix = partitioner.getFileIdPfx(0);
@@ -120,8 +143,6 @@ public class JavaBulkInsertHelper<T, R> extends BaseBulkInsertHelper<T, List<Hoo
           config.getProps());
       fileIdPrefix = fileIdPrefixProvider.createFilePrefix("");
     }
-
-    List<WriteStatus> writeStatuses = new ArrayList<>();
 
     new JavaLazyInsertIterable<>(repartitionedRecords.iterator(), true,
         config, instantTime, table,

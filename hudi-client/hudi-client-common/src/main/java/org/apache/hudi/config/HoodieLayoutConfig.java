@@ -22,6 +22,7 @@ import org.apache.hudi.common.config.ConfigClassProperty;
 import org.apache.hudi.common.config.ConfigGroups;
 import org.apache.hudi.common.config.ConfigProperty;
 import org.apache.hudi.common.config.HoodieConfig;
+import org.apache.hudi.common.engine.EngineType;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.index.HoodieIndex;
 import org.apache.hudi.table.storage.HoodieStorageLayout;
@@ -58,6 +59,9 @@ public class HoodieLayoutConfig extends HoodieConfig {
   public static final String PARTITION_BUCKET_LAYOUT_PARTITIONER_CLASS_NAME =
       "org.apache.hudi.table.action.commit.SparkPartitionBucketIndexPartitioner";
 
+  public static final String JAVA_SIMPLE_BUCKET_LAYOUT_PARTITIONER_CLASS_NAME =
+      "org.apache.hudi.table.action.commit.JavaBucketIndexPartitioner";
+
   private HoodieLayoutConfig() {
     super();
   }
@@ -68,9 +72,15 @@ public class HoodieLayoutConfig extends HoodieConfig {
 
   public static class Builder {
     public HoodieLayoutConfig layoutConfig = new HoodieLayoutConfig();
+    private EngineType engineType = EngineType.SPARK;
 
     public Builder fromProperties(Properties props) {
       this.layoutConfig.getProps().putAll(props);
+      return this;
+    }
+
+    public Builder withEngineType(EngineType engineType) {
+      this.engineType = engineType;
       return this;
     }
 
@@ -94,9 +104,16 @@ public class HoodieLayoutConfig extends HoodieConfig {
           && layoutConfig.getString(HoodieIndexConfig.INDEX_TYPE.key()).equals(HoodieIndex.IndexType.BUCKET.name())) {
         layoutConfig.setDefaultValue(LAYOUT_TYPE, HoodieStorageLayout.LayoutType.BUCKET.name());
 
-        // Currently, the partitioner of the SIMPLE bucket index is supported by SparkBucketIndexPartitioner only.
+        // Currently, the partitioner of the SIMPLE bucket index is supported by SparkBucketIndexPartitioner
+        // (or JavaBucketIndexPartitioner on the Java engine) only.
         if ("SIMPLE".equals(layoutConfig.getString(HoodieIndexConfig.BUCKET_INDEX_ENGINE_TYPE))) {
-          if (StringUtils.nonEmpty(layoutConfig.getString(HoodieIndexConfig.BUCKET_INDEX_PARTITION_EXPRESSIONS))) {
+          if (EngineType.JAVA.equals(engineType)) {
+            // The Java engine has no equivalent of SparkPartitionBucketIndexPartitioner: default to
+            // JavaBucketIndexPartitioner regardless of partition-level bucket expressions, so it can reject
+            // that unsupported configuration itself with a clear message instead of failing to load a
+            // Spark-only class.
+            layoutConfig.setDefaultValue(LAYOUT_PARTITIONER_CLASS_NAME, JAVA_SIMPLE_BUCKET_LAYOUT_PARTITIONER_CLASS_NAME);
+          } else if (StringUtils.nonEmpty(layoutConfig.getString(HoodieIndexConfig.BUCKET_INDEX_PARTITION_EXPRESSIONS))) {
             // partition level simple bucket index
             layoutConfig.setDefaultValue(LAYOUT_PARTITIONER_CLASS_NAME, PARTITION_BUCKET_LAYOUT_PARTITIONER_CLASS_NAME);
           } else {

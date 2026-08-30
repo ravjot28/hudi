@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
  * Packs incoming records to be upserted, into buckets.
  */
 @Slf4j
-public class JavaUpsertPartitioner<T> implements Partitioner  {
+public class JavaUpsertPartitioner<T> implements Partitioner, JavaBucketInfoGetter {
 
   /**
    * List of all small files to be corrected.
@@ -262,6 +262,7 @@ public class JavaUpsertPartitioner<T> implements Partitioner  {
     return smallFileLocations;
   }
 
+  @Override
   public BucketInfo getBucketInfo(int bucketNumber) {
     return bucketInfoMap.get(bucketNumber);
   }

@@ -18,14 +18,28 @@
 
 package org.apache.hudi.execution.bulkinsert;
 
+import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.exception.HoodieIndexException;
+import org.apache.hudi.index.HoodieIndex;
 import org.apache.hudi.table.BulkInsertPartitioner;
+import org.apache.hudi.table.HoodieTable;
 
 /**
  * A factory to generate built-in partitioner to repartition input records into at least
  * expected number of output spark partitions for bulk insert operation.
  */
 public abstract class JavaBulkInsertInternalPartitionerFactory {
+
+  public static BulkInsertPartitioner get(HoodieTable table, HoodieWriteConfig config) {
+    if (config.getIndexType().equals(HoodieIndex.IndexType.BUCKET)) {
+      if (config.getBucketIndexEngineType().equals(HoodieIndex.BucketIndexEngineType.SIMPLE)) {
+        return new JavaBucketIndexBulkInsertPartitioner(table);
+      }
+      throw new HoodieIndexException("Consistent hashing bucket index is not supported for the Java engine");
+    }
+    return get(config.getBulkInsertSortMode());
+  }
 
   public static BulkInsertPartitioner get(BulkInsertSortMode sortMode) {
     switch (sortMode) {

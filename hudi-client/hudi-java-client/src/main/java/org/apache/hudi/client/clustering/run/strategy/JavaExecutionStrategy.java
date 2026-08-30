@@ -117,6 +117,8 @@ public abstract class JavaExecutionStrategy<T>
               .map(String::trim).toArray(String[]::new),
           HoodieSchemaUtils.addMetadataFields(schema), getWriteConfig());
     } else {
+      // Sort-mode-only factory: bucket tables are not routed through JavaBucketIndexBulkInsertPartitioner
+      // here, so clustering a bucket-index table via the Java engine's bulk-insert path is unsupported.
       return JavaBulkInsertInternalPartitionerFactory.get(getWriteConfig().getBulkInsertSortMode());
     }
   }

@@ -30,6 +30,7 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.util.CommitUtils;
 import org.apache.hudi.common.util.HoodieTimer;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.exception.HoodieCommitException;
@@ -94,7 +95,7 @@ public abstract class BaseJavaCommitActionExecutor<T> extends
     HoodieWriteMetadata<List<WriteStatus>> result = new HoodieWriteMetadata<>();
 
     WorkloadProfile workloadProfile =
-        new WorkloadProfile(buildProfile(inputRecords), table.getIndex().canIndexLogFiles());
+        new WorkloadProfile(buildProfile(inputRecords), operationType, table.getIndex().canIndexLogFiles());
     log.info("Input workload profile :{}", workloadProfile);
     final Partitioner partitioner = getPartitioner(workloadProfile);
     try {
@@ -141,12 +142,21 @@ public abstract class BaseJavaCommitActionExecutor<T> extends
     return table.getMetaClient().getCommitActionType();
   }
 
-  private Partitioner getPartitioner(WorkloadProfile profile) {
-    if (WriteOperationType.isChangingRecords(operationType)) {
+  protected Partitioner getPartitioner(WorkloadProfile profile) {
+    Option<String> layoutPartitionerClass = table.getStorageLayout().layoutPartitionerClass();
+    if (layoutPartitionerClass.isPresent()) {
+      return getLayoutPartitioner(profile, layoutPartitionerClass.get());
+    } else if (WriteOperationType.isChangingRecords(operationType)) {
       return getUpsertPartitioner(profile);
     } else {
       return getInsertPartitioner(profile);
     }
+  }
+
+  public Partitioner getLayoutPartitioner(WorkloadProfile profile, String layoutPartitionerClass) {
+    return (Partitioner) ReflectionUtils.loadClass(layoutPartitionerClass,
+        new Class[] {WorkloadProfile.class, HoodieEngineContext.class, HoodieTable.class, HoodieWriteConfig.class},
+        profile, context, table, config);
   }
 
   private Map<Integer, List<HoodieRecord<T>>> partition(List<HoodieRecord<T>> dedupedRecords, Partitioner partitioner) {
@@ -208,8 +218,8 @@ public abstract class BaseJavaCommitActionExecutor<T> extends
   @SuppressWarnings("unchecked")
   protected Iterator<List<WriteStatus>> handleUpsertPartition(String instantTime, Integer partition, Iterator recordItr,
                                                               Partitioner partitioner) {
-    JavaUpsertPartitioner javaUpsertPartitioner = (JavaUpsertPartitioner) partitioner;
-    BucketInfo binfo = javaUpsertPartitioner.getBucketInfo(partition);
+    JavaBucketInfoGetter bucketInfoGetter = (JavaBucketInfoGetter) partitioner;
+    BucketInfo binfo = bucketInfoGetter.getBucketInfo(partition);
     BucketType btype = binfo.bucketType;
     try {
       if (btype.equals(BucketType.INSERT)) {
