@@ -25,6 +25,7 @@ import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.exception.HoodieIndexException;
 import org.apache.hudi.index.bloom.HoodieBloomIndex;
 import org.apache.hudi.index.bloom.ListBasedHoodieBloomIndexHelper;
+import org.apache.hudi.index.bucket.HoodieSimpleBucketIndex;
 import org.apache.hudi.keygen.BaseKeyGenerator;
 import org.apache.hudi.keygen.factory.HoodieAvroKeyGeneratorFactory;
 
@@ -51,6 +52,15 @@ public final class JavaHoodieIndexFactory {
         return new HoodieInMemoryHashIndex(config);
       case BLOOM:
         return new HoodieBloomIndex(config, ListBasedHoodieBloomIndexHelper.getInstance());
+      case BUCKET:
+        switch (config.getBucketIndexEngineType()) {
+          case SIMPLE:
+            return new HoodieSimpleBucketIndex(config);
+          case CONSISTENT_HASHING:
+            throw new HoodieIndexException("Consistent hashing bucket index is not supported for the Java engine");
+          default:
+            throw new HoodieIndexException("Unknown bucket index engine type: " + config.getBucketIndexEngineType());
+        }
       default:
         throw new HoodieIndexException("Unsupported index type " + config.getIndexType());
     }

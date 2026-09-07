@@ -86,12 +86,19 @@ public class RunCompactionActionExecutor<T> extends
           : CompactionUtils.getLogCompactionPlan(table.getMetaClient(), instantTime);
 
       // try to load internalSchema to support schema Evolution
-      HoodieWriteConfig configCopy = config;
+      // should not influence the original config: always copy it, since compaction (e.g. HoodieCompactor)
+      // may mutate the schema on whatever config instance it is handed. withProperties() alone only copies
+      // props-backed values, so engineType and viewStorageConfig (a live-config-only, embedded-timeline-
+      // server-installed override, not a prop) need to be carried over explicitly; build(false) skips
+      // re-running validate()/setDefaults() against the copy, since the source config was already validated.
+      HoodieWriteConfig configCopy = HoodieWriteConfig.newBuilder()
+          .withProperties(config.getProps())
+          .withEngineType(config.getEngineType())
+          .build(false);
+      configCopy.setViewStorageConfig(config.getViewStorageConfig());
       Pair<Option<String>, Option<String>> schemaPair = InternalSchemaCache
           .getInternalSchemaAndAvroSchemaForClusteringAndCompaction(table.getMetaClient(), instantTime);
       if (schemaPair.getLeft().isPresent() && schemaPair.getRight().isPresent()) {
-        // should not influence the original config, just copy it
-        configCopy = HoodieWriteConfig.newBuilder().withProperties(config.getProps()).build();
         configCopy.setInternalSchemaString(schemaPair.getLeft().get());
         configCopy.setSchema(schemaPair.getRight().get());
       }
@@ -103,7 +110,12 @@ public class RunCompactionActionExecutor<T> extends
       context.setJobStatus(this.getClass().getSimpleName(), "Preparing compaction metadata: " + config.getTableName());
 
       HoodieCommitMetadata metadata = new HoodieCommitMetadata(false);
-      metadata.addMetadata(HoodieCommitMetadata.SCHEMA_KEY, config.getSchema());
+      // configCopy, not config: HoodieCompactor resolves and records the actual TABLE schema onto configCopy
+      // (see HoodieCompactor#compact), which is what commit metadata's SCHEMA_KEY has always recorded --
+      // config.getSchema() is just the client's originally-configured schema, which may be a partial/evolving
+      // schema (e.g. MergeInto-style clients) that must not leak into SCHEMA_KEY and poison
+      // TableSchemaResolver#getTableSchemaFromLatestCommitMetadata for later reads.
+      metadata.addMetadata(HoodieCommitMetadata.SCHEMA_KEY, configCopy.getSchema());
       if (schemaPair.getLeft().isPresent()) {
         metadata.addMetadata(SerDeHelper.LATEST_SCHEMA, schemaPair.getLeft().get());
         metadata.addMetadata(HoodieCommitMetadata.SCHEMA_KEY, schemaPair.getRight().get());

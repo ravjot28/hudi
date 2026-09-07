@@ -1257,7 +1257,9 @@ public abstract class BaseHoodieTableServiceClient<I, T, O> extends BaseHoodieCl
     final Timer.Context timerContext = this.metrics.getRollbackCtx();
     try {
       HoodieTable table = createTable(config, storageConf, skipVersionCheck);
-      Option<HoodieInstant> commitInstantOpt = Option.fromJavaOptional(table.getActiveTimeline().getCommitsTimeline().getInstantsAsStream()
+      // Include log compaction, but leave pending regular compaction to its dedicated rollback path.
+      Option<HoodieInstant> commitInstantOpt = Option.fromJavaOptional(table.getActiveTimeline().getWriteTimeline().getInstantsAsStream()
+          .filter(instant -> !HoodieTimeline.COMPACTION_ACTION.equals(instant.getAction()))
           .filter(instant -> EQUALS.test(instant.requestedTime(), commitInstantTime))
           .findFirst());
 
@@ -1370,7 +1372,8 @@ public abstract class BaseHoodieTableServiceClient<I, T, O> extends BaseHoodieCl
           return Option.of(Pair.of(pendingRollbackOpt.get().getRollbackInstant(),
               Option.of(pendingRollbackOpt.get().getRollbackPlan())));
         }
-        commitInstantOpt = Option.fromJavaOptional(table.getActiveTimeline().getCommitsTimeline().getInstantsAsStream()
+        commitInstantOpt = Option.fromJavaOptional(table.getActiveTimeline().getWriteTimeline().getInstantsAsStream()
+            .filter(instant -> !HoodieTimeline.COMPACTION_ACTION.equals(instant.getAction()))
             .filter(instant -> EQUALS.test(instant.requestedTime(), commitInstantTime))
             .findFirst());
       }

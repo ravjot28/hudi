@@ -21,19 +21,23 @@ package org.apache.hudi.client.functional;
 import org.apache.hudi.callback.common.HoodieWriteCommitCallbackMessage;
 import org.apache.hudi.client.HoodieJavaWriteClient;
 import org.apache.hudi.client.WriteClientTestUtils;
+import org.apache.hudi.client.WriteStatus;
 import org.apache.hudi.client.clustering.plan.strategy.JavaSizeBasedClusteringPlanStrategy;
 import org.apache.hudi.client.clustering.run.strategy.JavaSortAndSizeExecutionStrategy;
+import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.SyncableFileSystemView;
 import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.common.testutils.HoodieTestTable;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.config.HoodieCleanConfig;
 import org.apache.hudi.config.HoodieClusteringConfig;
 import org.apache.hudi.config.HoodieCompactionConfig;
 import org.apache.hudi.config.HoodieWriteCommitCallbackConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.index.HoodieIndex;
+import org.apache.hudi.storage.StoragePath;
 import org.apache.hudi.table.action.HoodieWriteMetadata;
 import org.apache.hudi.testutils.GenericRecordValidationTestUtils;
 import org.apache.hudi.testutils.HoodieJavaClientTestHarness;
@@ -42,6 +46,8 @@ import org.apache.hudi.testutils.RecordingCommitCallback;
 import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Arrays;
 import java.util.List;
@@ -52,6 +58,7 @@ import static org.apache.hudi.common.testutils.HoodieTestUtils.INSTANT_GENERATOR
 import static org.apache.hudi.common.testutils.HoodieTestUtils.TIMELINE_FACTORY;
 import static org.apache.hudi.testutils.GenericRecordValidationTestUtils.assertDataInMORTable;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -98,6 +105,219 @@ public class TestHoodieJavaClientOnMergeOnReadStorage extends HoodieJavaClientTe
     metaClient.reloadActiveTimeline();
     Map<String, GenericRecord> recordMap = GenericRecordValidationTestUtils.getRecordsMap(config, storageConf, dataGen);
     assertEquals(75, recordMap.size());
+  }
+
+  /**
+   * insertPrepped is part of the public standalone write API and must be dispatched to an MOR delta-commit
+   * executor.  Inheriting HoodieJavaCopyOnWriteTable#insertPrepped silently writes base files instead, which
+   * breaks the same log-only-before-compaction invariant already exercised for regular inserts above.
+   */
+  @Test
+  public void testInsertPreppedUsesMorDeltaWritePath() throws Exception {
+    HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
+        HoodieIndex.IndexType.INMEMORY)
+        .withCompactionConfig(HoodieCompactionConfig.newBuilder().withMaxNumDeltaCommitsBeforeCompaction(1).build())
+        .build();
+    HoodieJavaWriteClient client = getHoodieWriteClient(config);
+
+    String commitTime = WriteClientTestUtils.createNewInstantTime();
+    List<WriteStatus> statuses = insertBatch(config, client, commitTime, "000", 20,
+        HoodieJavaWriteClient::insertPreppedRecords, true, false, 20, 20, 1, Option.empty(), INSTANT_GENERATOR);
+    assertFalse(statuses.isEmpty());
+    assertTrue(statuses.stream().allMatch(status ->
+            FSUtils.isLogFile(new StoragePath(status.getStat().getPath()).getName())),
+        "insertPrepped on MOR must append log files through a delta-commit executor, not use the inherited CoW base-file path");
+
+    Option<String> compactionTime = client.scheduleCompaction(Option.empty());
+    assertTrue(compactionTime.isPresent());
+    HoodieWriteMetadata writeMetadata = client.compact(compactionTime.get());
+    client.commitCompaction(compactionTime.get(), writeMetadata, Option.empty());
+    Map<String, GenericRecord> records = GenericRecordValidationTestUtils.getRecordsMap(config, storageConf, dataGen);
+    assertEquals(20, records.size(), "compaction must preserve every prepped insert");
+    client.close();
+  }
+
+  /**
+   * The Java MOR table exposes scheduleLogCompaction/logCompact, so the public operation must work end to
+   * end.  Scheduling currently produces a valid plan, but HoodieJavaMergeOnReadTableCompactor#preCompact
+   * explicitly rejects LOG_COMPACT during execution even though the Spark and Flink engines execute it.
+   */
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  public void testLogCompactionOnMORTable(boolean compactFirst) throws Exception {
+    HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
+        HoodieIndex.IndexType.INMEMORY)
+        .withCompactionConfig(HoodieCompactionConfig.newBuilder()
+            .withMaxNumDeltaCommitsBeforeCompaction(1)
+            .withLogCompactionEnabled(true)
+            .withLogCompactionBlocksThreshold(1)
+            .build())
+        .build();
+    HoodieJavaWriteClient client = getHoodieWriteClient(config);
+
+    String insertTime = WriteClientTestUtils.createNewInstantTime();
+    insertBatch(config, client, insertTime, "000", 40, HoodieJavaWriteClient::insert,
+        false, false, 40, 40, 1, Option.empty(), INSTANT_GENERATOR);
+    String updateTime = WriteClientTestUtils.createNewInstantTime();
+    updateBatch(config, client, updateTime, insertTime, Option.of(Arrays.asList(insertTime)),
+        "000", 20, HoodieJavaWriteClient::upsert, false, false, 20, 40, 2,
+        config.populateMetaFields(), INSTANT_GENERATOR);
+
+    if (compactFirst) {
+      Option<String> compactionTime = client.scheduleCompaction(Option.empty());
+      assertTrue(compactionTime.isPresent(), "the setup must create a base file before log compaction");
+      HoodieWriteMetadata compactionMetadata = client.compact(compactionTime.get());
+      client.commitCompaction(compactionTime.get(), compactionMetadata, Option.empty());
+
+      String postCompactionUpdate = WriteClientTestUtils.createNewInstantTime();
+      updateBatch(config, client, postCompactionUpdate, compactionTime.get(), Option.of(Arrays.asList(updateTime)),
+          "000", 20, HoodieJavaWriteClient::upsert, false, false, 20, 40, 3,
+          config.populateMetaFields(), INSTANT_GENERATOR);
+    }
+
+    Option<String> logCompactionTime = client.scheduleLogCompaction(Option.empty());
+    assertTrue(logCompactionTime.isPresent(), compactFirst
+        ? "logs appended over a base file must produce a log-compaction plan"
+        : "log-only file groups must produce a log-compaction plan");
+    HoodieWriteMetadata writeMetadata = client.logCompact(logCompactionTime.get(), true);
+    List<WriteStatus> logCompactionStatuses = (List<WriteStatus>) writeMetadata.getWriteStatuses();
+    logCompactionStatuses.forEach(status ->
+        assertFalse(status.hasErrors(), "log compaction returned a failed WriteStatus"));
+
+    metaClient.reloadActiveTimeline();
+    assertTrue(metaClient.getActiveTimeline().filterCompletedInstants().getInstantsAsStream()
+            .anyMatch(instant -> instant.requestedTime().equals(logCompactionTime.get())),
+        "log compaction must complete its timeline instant");
+    Map<String, GenericRecord> records = GenericRecordValidationTestUtils.getRecordsMap(config, storageConf, dataGen);
+    assertEquals(40, records.size(), "log compaction must preserve inserts and updates");
+    client.close();
+  }
+
+  /**
+   * Ports Spark's pending table-service ordering cases. A pending regular compaction owns the file
+   * slices and blocks a subsequent log-compaction plan; a pending log-compaction does not prevent a
+   * regular compaction plan from being created.
+   */
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  public void testCompactionAndLogCompactionSchedulingOrder(boolean scheduleRegularCompactionFirst) throws Exception {
+    HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
+        HoodieIndex.IndexType.INMEMORY)
+        .withCompactionConfig(HoodieCompactionConfig.newBuilder()
+            .withMaxNumDeltaCommitsBeforeCompaction(1)
+            .withLogCompactionEnabled(true)
+            .withLogCompactionBlocksThreshold(1)
+            .build())
+        .build();
+    HoodieJavaWriteClient client = getHoodieWriteClient(config);
+    try {
+      String insertTime = WriteClientTestUtils.createNewInstantTime();
+      insertBatch(config, client, insertTime, "000", 40, HoodieJavaWriteClient::insert,
+          false, false, 40, 40, 1, Option.empty(), INSTANT_GENERATOR);
+      String updateTime = WriteClientTestUtils.createNewInstantTime();
+      updateBatch(config, client, updateTime, insertTime, Option.of(Arrays.asList(insertTime)),
+          "000", 20, HoodieJavaWriteClient::upsert, false, false, 20, 40, 2,
+          config.populateMetaFields(), INSTANT_GENERATOR);
+
+      if (scheduleRegularCompactionFirst) {
+        assertTrue(client.scheduleCompaction(Option.empty()).isPresent());
+        assertFalse(client.scheduleLogCompaction(Option.empty()).isPresent(),
+            "pending regular compaction must block an overlapping log-compaction plan");
+      } else {
+        assertTrue(client.scheduleLogCompaction(Option.empty()).isPresent());
+        assertTrue(client.scheduleCompaction(Option.empty()).isPresent(),
+            "pending log compaction must not block a later regular compaction plan");
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  /** Ports Spark's schedule-inline-compaction configuration test to the Java write client. */
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  public void testInlineCompactionScheduling(boolean scheduleInlineCompaction) throws Exception {
+    HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
+        HoodieIndex.IndexType.INMEMORY)
+        .withCompactionConfig(HoodieCompactionConfig.newBuilder()
+            .withInlineCompaction(false)
+            .withScheduleInlineCompaction(scheduleInlineCompaction)
+            .withMaxNumDeltaCommitsBeforeCompaction(2)
+            .build())
+        .build();
+    HoodieJavaWriteClient client = getHoodieWriteClient(config);
+    try {
+      String insertTime = WriteClientTestUtils.createNewInstantTime();
+      insertBatch(config, client, insertTime, "000", 40, HoodieJavaWriteClient::insert,
+          false, false, 40, 40, 1, Option.empty(), INSTANT_GENERATOR);
+      String updateTime = WriteClientTestUtils.createNewInstantTime();
+      updateBatch(config, client, updateTime, insertTime, Option.of(Arrays.asList(insertTime)),
+          "000", 20, HoodieJavaWriteClient::upsert, false, false, 20, 40, 2,
+          config.populateMetaFields(), INSTANT_GENERATOR);
+
+      long pendingCompactions = metaClient.reloadActiveTimeline().getAllCommitsTimeline()
+          .filterPendingCompactionTimeline().countInstants();
+      assertEquals(scheduleInlineCompaction ? 1 : 0, pendingCompactions,
+          "schedule-inline-compaction must control whether the threshold creates a requested plan");
+    } finally {
+      client.close();
+    }
+  }
+
+  /**
+   * Ports Spark's cleaner/compaction interaction. Cleaning may reclaim old completed slices, but a
+   * requested compaction is a hard retention boundary: later delta commits must remain readable and
+   * the pending plan must survive until it can be executed.
+   */
+  @Test
+  public void testCleanerPreservesRequestedCompactionFileSlice() throws Exception {
+    HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
+        HoodieIndex.IndexType.INMEMORY)
+        .withCompactionConfig(HoodieCompactionConfig.newBuilder()
+            .withMaxNumDeltaCommitsBeforeCompaction(1)
+            .build())
+        .withCleanConfig(HoodieCleanConfig.newBuilder().retainCommits(4).build())
+        .build();
+    HoodieJavaWriteClient client = getHoodieWriteClient(config);
+    try {
+      String writeTime = WriteClientTestUtils.createNewInstantTime();
+      insertBatch(config, client, writeTime, "000", 100, HoodieJavaWriteClient::insert,
+          false, false, 100, 100, 1, Option.empty(), INSTANT_GENERATOR);
+
+      Option<String> completedCompaction = client.scheduleCompaction(Option.empty());
+      assertTrue(completedCompaction.isPresent());
+      HoodieWriteMetadata completedMetadata = client.compact(completedCompaction.get());
+      client.commitCompaction(completedCompaction.get(), completedMetadata, Option.empty());
+
+      String previousTime = completedCompaction.get();
+      writeTime = WriteClientTestUtils.createNewInstantTime();
+      updateBatch(config, client, writeTime, previousTime, Option.of(Arrays.asList(previousTime)),
+          "000", 50, HoodieJavaWriteClient::upsert, false, false, 50, 100, 2,
+          config.populateMetaFields(), INSTANT_GENERATOR);
+
+      Option<String> requestedCompaction = client.scheduleCompaction(Option.empty());
+      assertTrue(requestedCompaction.isPresent());
+      previousTime = requestedCompaction.get();
+
+      for (int i = 0; i < 6; i++) {
+        writeTime = WriteClientTestUtils.createNewInstantTime();
+        updateBatch(config, client, writeTime, previousTime, Option.of(Arrays.asList(previousTime)),
+            "000", 50, HoodieJavaWriteClient::upsert, false, false, 50, 100, i + 3,
+            config.populateMetaFields(), INSTANT_GENERATOR);
+        previousTime = writeTime;
+      }
+
+      metaClient.reloadActiveTimeline();
+      assertTrue(metaClient.getActiveTimeline().filterPendingCompactionTimeline()
+              .containsInstant(requestedCompaction.get()),
+          "cleaning must not delete or complete the requested compaction instant");
+      assertTrue(metaClient.getActiveTimeline().getCleanerTimeline().filterCompletedInstants().countInstants() > 0,
+          "the setup must actually execute cleaning, otherwise it cannot prove the retention boundary");
+      Map<String, GenericRecord> records = GenericRecordValidationTestUtils.getRecordsMap(config, storageConf, dataGen);
+      assertEquals(100, records.size(), "cleaning around a pending compaction must not lose records");
+    } finally {
+      client.close();
+    }
   }
 
   @Test
@@ -278,6 +498,8 @@ public class TestHoodieJavaClientOnMergeOnReadStorage extends HoodieJavaClientTe
     assertEquals(HoodieTimeline.REPLACE_COMMIT_ACTION, clusteringMessages.get(0).getCommitActionType().orElse(null));
     // Clustering writes new file groups, so every stat carries NULL_COMMIT and no prev path resolves.
     assertTrue(clusteringMessages.get(0).getPrevFilePaths().isEmpty());
+    Map<String, GenericRecord> records = GenericRecordValidationTestUtils.getRecordsMap(config, storageConf, dataGen);
+    assertEquals(200, records.size(), "clustering must preserve all records while replacing file groups");
   }
 
 }

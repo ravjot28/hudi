@@ -26,8 +26,10 @@ import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.table.HoodieTable;
+import org.apache.hudi.table.WorkloadProfile;
 import org.apache.hudi.table.action.HoodieWriteMetadata;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -58,6 +60,19 @@ public class JavaInsertOverwriteCommitActionExecutor<T>
   }
 
   @Override
+  protected Partitioner getPartitioner(WorkloadProfile profile) {
+    return table.getStorageLayout().layoutPartitionerClass()
+        .map(c -> getLayoutPartitioner(profile, c))
+        .orElseGet(() -> new JavaUpsertPartitioner(profile, context, table, config) {
+          @Override
+          protected List<SmallFile> getSmallFiles(String partitionPath) {
+            // Replacement records must live in new file groups; old groups are hidden at commit.
+            return Collections.emptyList();
+          }
+        });
+  }
+
+  @Override
   protected String getCommitActionType() {
     return HoodieTimeline.REPLACE_COMMIT_ACTION;
   }
@@ -71,7 +86,7 @@ public class JavaInsertOverwriteCommitActionExecutor<T>
     );
   }
 
-  private List<String> getAllExistingFileIds(String partitionPath) {
+  protected List<String> getAllExistingFileIds(String partitionPath) {
     // because new commit is not complete. it is safe to mark all existing file Ids as old files
     return table.getSliceView().getLatestFileSlices(partitionPath).map(fg -> fg.getFileId()).distinct().collect(Collectors.toList());
   }

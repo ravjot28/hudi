@@ -69,8 +69,8 @@ public class TestHoodieLogFormatAppendFailure {
 
   @BeforeAll
   public static void setUpClass() throws IOException {
-    // This test is not supported yet for Java 17 due to MiniDFSCluster can't initialize under Java 17
-    Assumptions.assumeFalse(shouldUseExternalHdfs());
+    // Embedded HDFS is opt-in on Java 11/17; use -Duse.embedded.hdfs=true with a compatible Hadoop runtime.
+    Assumptions.assumeFalse(shouldUseExternalHdfs() && !Boolean.getBoolean("use.embedded.hdfs"));
 
     // NOTE : The MiniClusterDFS leaves behind the directory under which the cluster was created
     baseDir = new File("/tmp/" + UUID.randomUUID());
@@ -87,10 +87,12 @@ public class TestHoodieLogFormatAppendFailure {
 
   @AfterAll
   public static void tearDownClass() {
-    // This test is not supported yet for Java 17 due to MiniDFSCluster can't initialize under Java 17
-    Assumptions.assumeFalse(shouldUseExternalHdfs());
+    // Embedded HDFS is opt-in on Java 11/17; use -Duse.embedded.hdfs=true with a compatible Hadoop runtime.
+    Assumptions.assumeFalse(shouldUseExternalHdfs() && !Boolean.getBoolean("use.embedded.hdfs"));
 
-    cluster.shutdown(true);
+    if (cluster != null) {
+      cluster.shutdown(true);
+    }
     // Force clean up the directory under which the cluster was created
     FileUtil.fullyDelete(baseDir);
   }

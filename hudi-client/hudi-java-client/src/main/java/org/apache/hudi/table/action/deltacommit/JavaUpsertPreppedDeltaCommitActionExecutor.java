@@ -30,6 +30,7 @@ import org.apache.hudi.exception.HoodieUpsertException;
 import org.apache.hudi.io.AppendHandleFactory;
 import org.apache.hudi.io.HoodieAppendHandle;
 import org.apache.hudi.table.HoodieTable;
+import org.apache.hudi.table.WorkloadProfile;
 import org.apache.hudi.table.action.HoodieWriteMetadata;
 import org.apache.hudi.table.action.commit.JavaBulkInsertHelper;
 
@@ -57,6 +58,9 @@ public class JavaUpsertPreppedDeltaCommitActionExecutor<T> extends BaseJavaDelta
   @Override
   public HoodieWriteMetadata<List<WriteStatus>> execute() {
     HoodieWriteMetadata<List<WriteStatus>> result = new HoodieWriteMetadata<>();
+    // Persist update locations before opening any handles so failed and empty writes remain recoverable.
+    saveWorkloadProfileMetadataToInflight(new WorkloadProfile(buildProfile(preppedInputRecords), operationType, false), instantTime);
+    table.getMetaClient().reloadActiveTimeline();
     // First group by target file id.
     HashMap<Pair<String, String>, List<HoodieRecord<T>>> recordsByFileId = new HashMap<>();
     List<HoodieRecord<T>> insertedRecords = new LinkedList<>();

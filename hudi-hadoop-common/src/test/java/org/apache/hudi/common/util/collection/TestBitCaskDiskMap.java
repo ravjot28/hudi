@@ -39,7 +39,7 @@ import org.apache.hudi.common.util.SpillableMapUtils;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.generic.IndexedRecord;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -251,10 +251,8 @@ public class TestBitCaskDiskMap extends HoodieCommonTestHarness {
     }
   }
 
-  /**
-   * @na: Leaving this test here for a quick performance test
-   */
-  @Disabled
+  /** Warmed size-estimation workload; a configurable coarse budget avoids a cold-start 100ms assertion. */
+  @Tag("performance")
   @Test
   public void testSizeEstimatorPerformance() throws IOException, URISyntaxException {
     // Test sizeEstimatorPerformance with simpleSchema
@@ -263,10 +261,18 @@ public class TestBitCaskDiskMap extends HoodieCommonTestHarness {
     List<HoodieRecord> hoodieRecords = testUtil.generateHoodieTestRecords(0, 1, schema);
     HoodieRecordSizeEstimator sizeEstimator = new HoodieRecordSizeEstimator<>(schema);
     HoodieRecord record = hoodieRecords.remove(0);
-    long startTime = System.currentTimeMillis();
-    SpillableMapUtils.computePayloadSize(record, sizeEstimator);
-    long timeTaken = System.currentTimeMillis() - startTime;
-    assertTrue(timeTaken < 100, "Expected execution time under 100ms but was " + timeTaken);
+    for (int i = 0; i < 100; i++) {
+      assertTrue(SpillableMapUtils.computePayloadSize(record, sizeEstimator) > 0);
+    }
+    long startTime = System.nanoTime();
+    long totalSize = 0;
+    for (int i = 0; i < 10000; i++) {
+      totalSize += SpillableMapUtils.computePayloadSize(record, sizeEstimator);
+    }
+    long elapsedMillis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
+    assertTrue(totalSize > 0, "the measured loop must estimate actual records");
+    assertTrue(elapsedMillis < Long.getLong("java.mor.estimator.maxMillis", 5000L),
+        "10,000 warmed size estimates took " + elapsedMillis + "ms");
   }
 
   private void verifyCleanup(BitCaskDiskMap<String, HoodieRecord> records) {

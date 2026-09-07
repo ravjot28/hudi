@@ -53,6 +53,7 @@ import org.apache.hudi.storage.HoodieStorage;
 import org.apache.hudi.storage.StorageConfiguration;
 import org.apache.hudi.storage.StoragePath;
 import org.apache.hudi.storage.StoragePathInfo;
+import org.apache.hudi.storage.inline.InLineFSUtils;
 
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
@@ -226,7 +227,9 @@ public class HoodieAvroReaderContext extends HoodieReaderContext<IndexedRecord> 
     if (reusableFileReaders.containsKey(path)) {
       return reusableFileReaders.get(path);
     } else {
-      HoodieFileFormat fileFormat = isMultiFormat && !isLogFile ? HoodieFileFormat.fromFileExtension(path.getFileExtension()) : baseFileFormat;
+      // Inline columnar log blocks contain Parquet, independently of the table's base-file format.
+      HoodieFileFormat fileFormat = InLineFSUtils.SCHEME.equals(path.toUri().getScheme()) ? HoodieFileFormat.PARQUET
+          : isMultiFormat && !isLogFile ? HoodieFileFormat.fromFileExtension(path.getFileExtension()) : baseFileFormat;
       try {
         return func.apply(fileFormat);
       } catch (HoodieIOException e) {

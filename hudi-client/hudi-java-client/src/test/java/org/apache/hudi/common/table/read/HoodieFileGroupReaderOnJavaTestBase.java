@@ -105,9 +105,9 @@ public abstract class HoodieFileGroupReaderOnJavaTestBase<T> extends TestHoodieF
       // Make a copy of the records for writing. The writer will clear out the data field.
       List<HoodieRecord> recordsCopy = new ArrayList<>(recordList.size());
       recordList.forEach(hoodieRecord -> recordsCopy.add(hoodieRecord.newInstance()));
-      if (operation.toLowerCase().equals("insert")) {
+      if (operation.equalsIgnoreCase("insert")) {
         writeClient.commit(instantTime, writeClient.insert(recordsCopy, instantTime), Option.empty(), DELTA_COMMIT_ACTION, Collections.emptyMap());
-      } else if (operation.toLowerCase().equals("bulkInsert")) {
+      } else if (operation.equalsIgnoreCase("bulkInsert")) {
         writeClient.commit(instantTime, writeClient.bulkInsert(recordsCopy, instantTime), Option.empty(), DELTA_COMMIT_ACTION, Collections.emptyMap());
       } else {
         writeClient.commit(instantTime, writeClient.upsert(recordsCopy, instantTime), Option.empty(), DELTA_COMMIT_ACTION, Collections.emptyMap());

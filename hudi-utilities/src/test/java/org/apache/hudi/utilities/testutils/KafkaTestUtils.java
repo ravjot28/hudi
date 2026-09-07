@@ -25,24 +25,34 @@ import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.Config;
 import org.apache.kafka.clients.admin.ConfigEntry;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.TopicExistsException;
+import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import scala.Tuple2;
+
+import static org.awaitility.Awaitility.await;
 
 public class KafkaTestUtils {
   private static final Logger LOG = LoggerFactory.getLogger(KafkaTestUtils.class);
@@ -88,11 +98,47 @@ public class KafkaTestUtils {
                         .collect(Collectors.toList())))
         ).all().get();
       }
+      waitForTopicReady(adminClient, topic, numPartitions, properties);
     } catch (Exception e) {
       if (e.getCause() instanceof TopicExistsException) {
         throw (TopicExistsException) e.getCause();
       }
       throw new RuntimeException(e);
+    }
+  }
+
+  private void waitForTopicReady(AdminClient adminClient, String topic, int numPartitions, Properties properties) {
+    Properties consumerProperties = getAdminProps();
+    consumerProperties.setProperty(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+    consumerProperties.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+    ConfigResource resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);
+    try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProperties)) {
+      // Topic creation and configuration acknowledgements precede propagation to broker metadata.
+      // Match the consumer metadata lookup used by KafkaOffsetGen before handing the topic to a test.
+      await("Kafka topic " + topic + " partitions and configuration to become visible")
+          .pollInSameThread()
+          .pollInterval(100, TimeUnit.MILLISECONDS)
+          .atMost(30, TimeUnit.SECONDS)
+          .until(() -> {
+            List<PartitionInfo> partitions = consumer.listTopics(Duration.ofSeconds(5)).get(topic);
+            if (partitions == null || partitions.size() != numPartitions
+                || partitions.stream().anyMatch(partition -> partition.leader() == null || partition.leader().id() < 0)) {
+              return false;
+            }
+            Config config;
+            try {
+              config = adminClient.describeConfigs(Collections.singleton(resource)).all().get(5, TimeUnit.SECONDS).get(resource);
+            } catch (ExecutionException e) {
+              if (e.getCause() instanceof UnknownTopicOrPartitionException) {
+                return false;
+              }
+              throw e;
+            }
+            return properties == null || properties.entrySet().stream().allMatch(entry -> {
+              ConfigEntry actual = config.get(entry.getKey().toString());
+              return actual != null && entry.getValue().toString().equals(actual.value());
+            });
+          });
     }
   }
 
