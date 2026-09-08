@@ -5,6 +5,8 @@ keywords: [hudi, spark, flink, batch, processing]
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
+For batch reads without a Spark or Flink runtime, see the [standalone Java client](java-client.md).
+
 ## Spark DataSource API
 
 The `hudi-spark` module offers the DataSource API to read a Hudi table into a Spark DataFrame.

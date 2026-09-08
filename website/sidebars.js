@@ -15,6 +15,7 @@ module.exports = {
                 'overview',
                 'quick-start-guide',
                 'flink-quick-start-guide',
+                'java-client',
                 'python-rust-quick-start-guide',
                 'unstructured-data-quick-start-guide',
                 'docker_demo',

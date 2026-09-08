@@ -1,7 +1,7 @@
 ---
 title: Batch Writes
 keywords: [hudi, incremental, batch, processing]
-last_modified_at: 2026-05-27T00:00:00-00:00
+last_modified_at: 2026-09-07T21:06:52-04:00
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -602,4 +602,5 @@ The following advanced storage configuration options were added in Hudi 1.2.0:
 
 
 ## Java Client
+The [standalone Java client guide](java-client.md) covers MOR reads, writes, table services, and Java bucket-index configuration in the development version.
 We can use plain java to write to hudi tables. To use Java client we can refere [here](https://github.com/apache/hudi/blob/master/hudi-examples/hudi-examples-java/src/main/java/org/apache/hudi/examples/java/HoodieJavaWriteClientExample.java)
