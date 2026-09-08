@@ -44,13 +44,17 @@ public class HoodieJavaMergeOnReadTableCompactor<T>
   @Override
   public void preCompact(
       HoodieTable table, HoodieTimeline pendingCompactionTimeline, WriteOperationType operationType, String instantTime) {
-    if (WriteOperationType.LOG_COMPACT.equals(operationType)) {
-      throw new UnsupportedOperationException("Log compaction is not supported for this execution engine.");
-    }
-    HoodieInstant inflightInstant = table.getInstantGenerator().getCompactionInflightInstant(instantTime);
+    boolean logCompaction = WriteOperationType.LOG_COMPACT.equals(operationType);
+    HoodieInstant inflightInstant = logCompaction
+        ? table.getInstantGenerator().getLogCompactionInflightInstant(instantTime)
+        : table.getInstantGenerator().getCompactionInflightInstant(instantTime);
     if (pendingCompactionTimeline.containsInstant(inflightInstant)) {
       try (TransactionManager transactionManager = new TransactionManager(table.getConfig(), table.getStorage())) {
-        table.rollbackInflightCompaction(inflightInstant, transactionManager);
+        if (logCompaction) {
+          table.rollbackInflightLogCompaction(inflightInstant, transactionManager);
+        } else {
+          table.rollbackInflightCompaction(inflightInstant, transactionManager);
+        }
       }
       table.getMetaClient().reloadActiveTimeline();
     }

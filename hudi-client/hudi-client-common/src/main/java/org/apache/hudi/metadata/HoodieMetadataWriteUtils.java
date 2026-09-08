@@ -352,6 +352,12 @@ public class HoodieMetadataWriteUtils {
       properties.put(HoodieMetricsConfig.METRICS_REPORTER_PREFIX.key(),
           writeConfig.getMetricReporterMetricsNamePrefix() + METADATA_TABLE_NAME_SUFFIX);
     }
+    // The metadata writer participates in the same failure/recovery lifecycle as its data writer.
+    // Preserve explicitly configured heartbeat leases, including on rollback recovery.
+    properties.put(HoodieWriteConfig.CLIENT_HEARTBEAT_INTERVAL_IN_MS.key(),
+        writeConfig.getHoodieClientHeartbeatIntervalInMs().toString());
+    properties.put(HoodieWriteConfig.CLIENT_HEARTBEAT_NUM_TOLERABLE_MISSES.key(),
+        writeConfig.getHoodieClientHeartbeatTolerableMisses().toString());
     // HFile caching properties
     properties.put(HoodieReaderConfig.HFILE_BLOCK_CACHE_ENABLED.key(),
         writeConfig.getBooleanOrDefault(HoodieReaderConfig.HFILE_BLOCK_CACHE_ENABLED));

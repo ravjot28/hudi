@@ -48,24 +48,30 @@ public class LazyConcatenatingIterator<T> implements ClosableIterator<T> {
   @Override
   public void close() {
     if (!closed) {
-      if (itr != null) {
-        itr.close();
-        itr = null;
-      }
-      iteratorSuppliers.clear();
       closed = true;
+      iteratorSuppliers.clear();
+      ClosableIterator<T> current = itr;
+      itr = null;
+      if (current != null) {
+        current.close();
+      }
     }
   }
 
   @Override
   public boolean hasNext() {
+    if (closed) {
+      return false;
+    }
     init();
     while (itr != null) {
       if (itr.hasNext()) {
         return true;
       }
       // close current iterator
-      this.itr.close();
+      ClosableIterator<T> exhausted = itr;
+      itr = null;
+      exhausted.close();
       if (!iteratorSuppliers.isEmpty()) {
         // move to the next
         itr = iteratorSuppliers.poll().get();

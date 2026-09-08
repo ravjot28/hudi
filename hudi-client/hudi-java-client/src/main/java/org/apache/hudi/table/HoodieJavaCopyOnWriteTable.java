@@ -50,6 +50,7 @@ import org.apache.hudi.keygen.factory.HoodieAvroKeyGeneratorFactory;
 import org.apache.hudi.metadata.MetadataPartitionType;
 import org.apache.hudi.table.action.HoodieWriteMetadata;
 import org.apache.hudi.table.action.bootstrap.HoodieBootstrapWriteMetadata;
+import org.apache.hudi.table.action.bootstrap.JavaBootstrapCommitActionExecutor;
 import org.apache.hudi.table.action.clean.CleanActionExecutor;
 import org.apache.hudi.table.action.clean.CleanPlanActionExecutor;
 import org.apache.hudi.table.action.cluster.ClusteringPlanActionExecutor;
@@ -57,11 +58,13 @@ import org.apache.hudi.table.action.cluster.JavaExecuteClusteringCommitActionExe
 import org.apache.hudi.table.action.commit.JavaBulkInsertCommitActionExecutor;
 import org.apache.hudi.table.action.commit.JavaBulkInsertPreppedCommitActionExecutor;
 import org.apache.hudi.table.action.commit.JavaDeleteCommitActionExecutor;
+import org.apache.hudi.table.action.commit.JavaDeletePartitionCommitActionExecutor;
 import org.apache.hudi.table.action.commit.JavaDeletePreppedCommitActionExecutor;
 import org.apache.hudi.table.action.commit.JavaInsertCommitActionExecutor;
 import org.apache.hudi.table.action.commit.JavaInsertOverwriteCommitActionExecutor;
 import org.apache.hudi.table.action.commit.JavaInsertOverwriteTableCommitActionExecutor;
 import org.apache.hudi.table.action.commit.JavaInsertPreppedCommitActionExecutor;
+import org.apache.hudi.table.action.commit.JavaPartitionTTLActionExecutor;
 import org.apache.hudi.table.action.commit.JavaUpsertCommitActionExecutor;
 import org.apache.hudi.table.action.commit.JavaUpsertPreppedCommitActionExecutor;
 import org.apache.hudi.table.action.index.RunIndexActionExecutor;
@@ -130,7 +133,7 @@ public class HoodieJavaCopyOnWriteTable<T>
 
   @Override
   public HoodieWriteMetadata deletePartitions(HoodieEngineContext context, String instantTime, List<String> partitions) {
-    throw new HoodieNotSupportedException("Delete partitions is not supported yet");
+    return new JavaDeletePartitionCommitActionExecutor<>(context, config, this, instantTime, partitions).execute();
   }
 
   @Override
@@ -177,7 +180,7 @@ public class HoodieJavaCopyOnWriteTable<T>
 
   @Override
   public HoodieWriteMetadata<List<WriteStatus>> managePartitionTTL(HoodieEngineContext context, String instantTime) {
-    throw new HoodieNotSupportedException("Manage partition ttl is not supported yet");
+    return new JavaPartitionTTLActionExecutor<>(context, config, this, instantTime).execute();
   }
 
   @Override
@@ -206,13 +209,15 @@ public class HoodieJavaCopyOnWriteTable<T>
   @Override
   public HoodieBootstrapWriteMetadata<List<WriteStatus>> bootstrap(HoodieEngineContext context,
                                                                    Option<Map<String, String>> extraMetadata) {
-    throw new HoodieNotSupportedException("Bootstrap is not supported yet");
+    return new JavaBootstrapCommitActionExecutor(context, config, this, extraMetadata).execute();
   }
 
   @Override
   public void rollbackBootstrap(HoodieEngineContext context,
                                 String instantTime) {
-    throw new HoodieNotSupportedException("RollbackBootstrap is not supported yet");
+    org.apache.hudi.metadata.HoodieTableMetadataUtil.deleteMetadataTable(config.getBasePath(), context);
+    scheduleRestore(context, instantTime, org.apache.hudi.common.table.timeline.HoodieTimeline.INIT_INSTANT_TS);
+    restore(context, instantTime, org.apache.hudi.common.table.timeline.HoodieTimeline.INIT_INSTANT_TS);
   }
 
   @Override

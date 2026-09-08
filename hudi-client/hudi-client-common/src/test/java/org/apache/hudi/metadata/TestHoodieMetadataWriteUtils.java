@@ -74,6 +74,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class TestHoodieMetadataWriteUtils {
 
   @Test
+  void testMetadataRollbackUsesConfiguredHeartbeatLease() {
+    HoodieWriteConfig dataConfig = HoodieWriteConfig.newBuilder().withPath("/tmp/heartbeat-config")
+        .withHeartbeatIntervalInMs(1000).withHeartbeatTolerableMisses(2).build();
+    HoodieWriteConfig metadataConfig = HoodieMetadataWriteUtils.createMetadataWriteConfig(
+        dataConfig, HoodieFailedWritesCleaningPolicy.LAZY, HoodieTableVersion.TEN);
+    assertEquals(dataConfig.getHoodieClientHeartbeatIntervalInMs(), metadataConfig.getHoodieClientHeartbeatIntervalInMs());
+    assertEquals(dataConfig.getHoodieClientHeartbeatTolerableMisses(), metadataConfig.getHoodieClientHeartbeatTolerableMisses());
+  }
+
+  @Test
   void testCreateEmptyNativeLogFile(@TempDir Path tempDir) throws Exception {
     String instantTime = "20260717120000000";
     String fileId = "files-0000";

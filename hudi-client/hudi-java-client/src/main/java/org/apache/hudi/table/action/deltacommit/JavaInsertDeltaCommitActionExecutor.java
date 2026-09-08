@@ -36,13 +36,13 @@ public class JavaInsertDeltaCommitActionExecutor<T> extends BaseJavaDeltaCommitA
 
   public JavaInsertDeltaCommitActionExecutor(HoodieJavaEngineContext context, HoodieWriteConfig config, HoodieTable table,
                                              String instantTime, List<HoodieRecord<T>> inputRecords) {
-    super(context, config, table, instantTime, WriteOperationType.UPSERT);
+    super(context, config, table, instantTime, WriteOperationType.INSERT);
     this.inputRecords = inputRecords;
   }
 
   @Override
   public HoodieWriteMetadata<List<WriteStatus>> execute() {
     return JavaWriteHelper.newInstance().write(instantTime, inputRecords, context, table,
-        config.shouldCombineBeforeUpsert(), config.getUpsertShuffleParallelism(),this, operationType);
+        config.shouldCombineBeforeInsert(), config.getInsertShuffleParallelism(), this, operationType);
   }
 }

@@ -212,6 +212,10 @@ public abstract class HoodieAppendHandle<T, I, K, O> extends HoodieWriteHandle<T
             statuses.get(statuses.size() - 1), hoodieTable, secondaryIndexDefns, config, instantTime, writeSchemaWithMetaFields);
       }
 
+      // A failed first native write may produce no append result. Do not lose its error status.
+      if ((writeStatus.hasErrors() || writeStatus.hasGlobalError()) && !statuses.contains(writeStatus)) {
+        statuses.add(writeStatus);
+      }
       return statuses;
     } catch (IOException e) {
       throw new HoodieUpsertException("Failed to close " + getClass().getSimpleName(), e);
