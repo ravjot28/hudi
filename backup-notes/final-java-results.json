@@ -1,0 +1,174 @@
+{
+  "strict_gate": "failed",
+  "summary": "526 cases; 0 final failures/errors/skips; 1 retry-recovered metadata clustering failure",
+  "suites": [
+    {
+      "suite": "org.apache.hudi.client.TestAvroPayloadSchemaMismatch",
+      "tests": "4",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.TestHoodieJavaReadClient",
+      "tests": "220",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.TestHoodieJavaRecordMerger",
+      "tests": "47",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.TestHoodieJavaWriteClientInsert",
+      "tests": "9",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.TestJavaHoodieBackedMetadata",
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 1
+    },
+    {
+      "suite": "org.apache.hudi.client.TestJavaRecordMergerAssessment",
+      "tests": "6",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "1",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.common.TestHoodieJavaEngineContext",
+      "tests": "4",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.common.TestMultipleHoodieJavaWriteClient",
+      "tests": "2",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.functional.TestHoodieJavaClientOnCopyOnWriteStorage",
+      "tests": "39",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.functional.TestHoodieJavaClientOnCopyOnWriteStorageForTestFormat",
+      "tests": "39",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.functional.TestHoodieJavaClientOnMergeOnReadStorage",
+      "tests": "13",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.client.functional.TestJavaNonBlockingConcurrencyControl",
+      "tests": "20",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.common.table.read.TestHoodieFileGroupReaderOnJava",
+      "tests": "23",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.execution.bulkinsert.TestJavaBulkInsertInternalPartitioner",
+      "tests": "2",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.execution.bulkinsert.TestJavaBulkInsertInternalPartitionerFactory",
+      "tests": "3",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.hadoop.TestHoodieFileGroupReaderOnHive",
+      "tests": "20",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.metadata.TestJavaHoodieMetadataBulkInsertPartitioner",
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.table.action.commit.TestJavaBucketIndexPartitioner",
+      "tests": "2",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.table.action.commit.TestJavaCopyOnWriteActionExecutor",
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.table.action.commit.TestJavaDeleteHelper",
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    },
+    {
+      "suite": "org.apache.hudi.table.action.commit.TestSchemaEvolutionClient",
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "flakes": 0
+    }
+  ]
+}

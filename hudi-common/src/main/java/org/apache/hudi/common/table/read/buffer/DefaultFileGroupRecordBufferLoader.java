@@ -80,7 +80,18 @@ class DefaultFileGroupRecordBufferLoader<T> extends LogScanningRecordBufferLoade
       recordBuffer = new KeyBasedFileGroupRecordBuffer<>(
           readerContext, hoodieTableMetaClient, readerContext.getMergeMode(), partialUpdateModeOpt, props, orderingFieldNames, updateProcessor);
     }
-    return Pair.of(recordBuffer, scanLogFiles(readerContext, storage, inputSplit, hoodieTableMetaClient, props,
-        readerParameters, readStats, recordBuffer));
+    try {
+      return Pair.of(recordBuffer, scanLogFiles(readerContext, storage, inputSplit, hoodieTableMetaClient, props,
+          readerParameters, readStats, recordBuffer));
+    } catch (RuntimeException | Error failure) {
+      // Ownership passes to the file-group reader only after scanning succeeds.
+      // A failing merger can otherwise leave an allocated spill map unreachable.
+      try {
+        recordBuffer.close();
+      } catch (RuntimeException | Error closeFailure) {
+        failure.addSuppressed(closeFailure);
+      }
+      throw failure;
+    }
   }
 }

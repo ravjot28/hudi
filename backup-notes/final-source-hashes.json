@@ -1,0 +1,32 @@
+[
+  {
+    "branch": "pr/java-mor-record-merger",
+    "commit": "a0f0f9308cf755ef4dc07571003db20b5fd6ba3b",
+    "file": "hudi-common/src/main/java/org/apache/hudi/common/table/read/buffer/DefaultFileGroupRecordBufferLoader.java",
+    "sha256": "2fda75d89a478173b79fe65a563b5264c60dbd1f26b48aee6c5c45939c1fd98d"
+  },
+  {
+    "branch": "pr/java-mor-record-merger",
+    "commit": "a0f0f9308cf755ef4dc07571003db20b5fd6ba3b",
+    "file": "hudi-client/hudi-java-client/src/main/java/org/apache/hudi/client/HoodieJavaWriteClient.java",
+    "sha256": "f5f29429988341fe2610cdaeab2d914723abac96b58b6b0d3f0b7a8c8d8b5f77"
+  },
+  {
+    "branch": "pr/java-mor-record-merger",
+    "commit": "a0f0f9308cf755ef4dc07571003db20b5fd6ba3b",
+    "file": "hudi-client/hudi-java-client/src/test/java/org/apache/hudi/client/TestHoodieJavaRecordMerger.java",
+    "sha256": "ea5e61719bb2510bda0f4ede99edbec07d90302b7354d414a91efb0a77e1f4ab"
+  },
+  {
+    "branch": "pr/java-mor-record-merger",
+    "commit": "a0f0f9308cf755ef4dc07571003db20b5fd6ba3b",
+    "file": "hudi-examples/hudi-examples-java/src/main/java/org/apache/hudi/examples/java/HoodieJavaMergeOnReadExample.java",
+    "sha256": "f4628c2a2fb39c46de7a4262c80fae233ce8bc231b1e4eb1b7edb53ae8da6b9d"
+  },
+  {
+    "branch": "pr/java-mor-record-merger-docs",
+    "commit": "021747959a011bb4f1ad9fcb3984dbe9cb614677",
+    "file": "website/docs/java-client.md",
+    "sha256": "c7600f1cbd762836020d7f8529de10dd9b3f85ac6632e8f1edb8c48eb3c12438"
+  }
+]

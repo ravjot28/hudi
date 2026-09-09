@@ -1,0 +1,39 @@
+[
+  {
+    "repo": "/home/ravjot28/dev/hudi",
+    "branch": "pr/java-mor-record-merger",
+    "parent": "29ee4d8214baee39a05a4478bf7eea96a751540f",
+    "commit": "a0f0f9308cf755ef4dc07571003db20b5fd6ba3b",
+    "tree": "57bfc847727657694b6a4b4bfb423370cd72fd49",
+    "title": "fix(java): validate native MOR mergers and release failed reader resources",
+    "files": [
+      "hudi-common/src/main/java/org/apache/hudi/common/table/read/buffer/DefaultFileGroupRecordBufferLoader.java",
+      "hudi-client/hudi-java-client/src/main/java/org/apache/hudi/client/HoodieJavaWriteClient.java",
+      "hudi-client/hudi-java-client/src/test/java/org/apache/hudi/client/TestHoodieJavaRecordMerger.java",
+      "hudi-examples/hudi-examples-java/src/main/java/org/apache/hudi/examples/java/HoodieJavaMergeOnReadExample.java"
+    ]
+  },
+  {
+    "repo": "/home/ravjot28/dev/hudi",
+    "branch": "pr/java-mor-partial-update-regression",
+    "parent": "a0f0f9308cf755ef4dc07571003db20b5fd6ba3b",
+    "commit": "09a55b0890fc2d1791769b390eefab7ea53b8bcd",
+    "tree": "029df0030c4c09a077814820d339cff4d1a1f8b2",
+    "title": "test: reproduce partial-update results changing across compaction",
+    "files": [
+      "hudi-client/hudi-java-client/src/test/java/org/apache/hudi/client/TestHoodieJavaRecordMerger.java",
+      "hudi-common/src/test/java/org/apache/hudi/common/table/read/TestPartialUpdateMergeGrouping.java"
+    ]
+  },
+  {
+    "repo": "/home/ravjot28/dev/hudi/target/java-mor-pr-prep/website-checkout",
+    "branch": "pr/java-mor-record-merger-docs",
+    "parent": "d3f8d858e4b5743248874aa40921b485f904082f",
+    "commit": "021747959a011bb4f1ad9fcb3984dbe9cb614677",
+    "tree": "829569c75be359d6a7a09eda42cad1238c6b8a89",
+    "title": "docs: explain native Java MOR RecordMerger configuration",
+    "files": [
+      "website/docs/java-client.md"
+    ]
+  }
+]

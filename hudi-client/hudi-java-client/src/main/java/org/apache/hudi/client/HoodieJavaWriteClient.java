@@ -44,6 +44,7 @@ import org.apache.hudi.table.upgrade.JavaUpgradeDowngradeHelper;
 
 import com.codahale.metrics.Timer;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -199,7 +200,8 @@ public class HoodieJavaWriteClient<T> extends
     HoodieTable<T, List<HoodieRecord<T>>, List<HoodieKey>, List<WriteStatus>> table =
         initTable(WriteOperationType.DELETE, Option.ofNullable(instantTime));
     preWrite(instantTime, WriteOperationType.DELETE, table.getMetaClient());
-    HoodieWriteMetadata<List<WriteStatus>> result = table.delete(context,instantTime, keys);
+    // Delete-key reduction mutates its input. Keep caller-owned (including immutable) lists intact.
+    HoodieWriteMetadata<List<WriteStatus>> result = table.delete(context, instantTime, new ArrayList<>(keys));
     return postWrite(result, instantTime, table);
   }
 
