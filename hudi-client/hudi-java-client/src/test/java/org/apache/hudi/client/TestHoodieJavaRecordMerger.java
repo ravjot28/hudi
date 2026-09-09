@@ -418,6 +418,27 @@ public class TestHoodieJavaRecordMerger extends HoodieJavaClientTestHarness {
     }
   }
 
+  @ParameterizedTest
+  @CsvSource({"EVENT_TIME_ORDERING,false", "EVENT_TIME_ORDERING,true", "COMMIT_TIME_ORDERING,false", "COMMIT_TIME_ORDERING,true"})
+  void testOutOfOrderPartialUpdatesAreIndependentOfCompaction(RecordMergeMode mode, boolean compactFirst) throws Exception {
+    HoodieWriteConfig config = config(mode);
+    initialize(config, mode, Option.of(PartialUpdateMode.IGNORE_DEFAULTS));
+    try (HoodieJavaWriteClient<IndexedRecord> client = new HoodieJavaWriteClient<>(context, config)) {
+      write(client, WriteOperationType.INSERT, record("a", 50, 50, "preserve"));
+      if (compactFirst) {
+        compact(client);
+      }
+      write(client, WriteOperationType.UPSERT, record("a", 60, 60, null));
+      assertEquals(Collections.singletonMap("a", "preserve"), snapshot());
+      write(client, WriteOperationType.UPSERT, record("a", 10, 10, "late"));
+      String expected = mode == RecordMergeMode.EVENT_TIME_ORDERING ? "preserve" : "late";
+      assertEquals(Collections.singletonMap("a", expected), snapshot());
+      compact(client);
+      assertEquals(Collections.singletonMap("a", expected), optimized());
+      assertEquals(optimized(), snapshot());
+    }
+  }
+
   private HoodieWriteConfig config(RecordMergeMode mode) {
     Properties props = new Properties();
     props.setProperty(HoodieTableConfig.TYPE.key(), HoodieTableType.MERGE_ON_READ.name());
