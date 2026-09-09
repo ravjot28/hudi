@@ -80,7 +80,34 @@ A non-earliest start with a null end reads through the latest completed instant.
 
 Initialize the table as `MERGE_ON_READ` and use `HoodieJavaWriteClient` for inserts, upserts, deletes, and prepared-record operations.
 Set `EngineType.JAVA` on `HoodieWriteConfig.Builder`. Check returned write statuses and follow the configured commit policy.
-The existing [Java write example](https://github.com/apache/hudi/blob/master/hudi-examples/hudi-examples-java/src/main/java/org/apache/hudi/examples/java/HoodieJavaWriteClientExample.java) shows table initialization and ordinary write operations.
+The [native Avro MOR example](https://github.com/apache/hudi/blob/master/hudi-examples/hudi-examples-java/src/main/java/org/apache/hudi/examples/java/HoodieJavaMergeOnReadExample.java) creates a table, inserts and updates records, deletes a key, reads a snapshot, and compacts the table.
+It supplies `HoodieAvroIndexedRecord` values to `HoodieJavaWriteClient<IndexedRecord>` and uses explicit event-time ordering; a legacy payload class is not required for that path.
+
+### Record merging
+
+Use `COMMIT_TIME_ORDERING` when later commits should win, or `EVENT_TIME_ORDERING` with configured ordering fields when older events can arrive late.
+Set the same merge mode when initializing the table and building the write configuration. When copying a write configuration, set `EngineType.JAVA` again: copying properties does not copy the builder's engine selection.
+For specialized semantics, implement `HoodieRecordMerger` with record type `AVRO` and a stable strategy ID. The Java writer, snapshot reader, and compaction use the shared merge infrastructure.
+
+Configure the implementation class and strategy on the writer:
+
+```java
+HoodieWriteConfig config = HoodieWriteConfig.newBuilder()
+    .withEngineType(EngineType.JAVA)
+    // Also supply the table path, schema, keys, index, and other write settings.
+    .withRecordMergeMode(RecordMergeMode.CUSTOM)
+    .withRecordMergeImplClasses(MyAvroMerger.class.getName())
+    .withRecordMergeStrategyId(MyAvroMerger.STRATEGY_ID)
+    .build();
+```
+
+Persist that mode and strategy when creating the table using `HoodieTableMetaClient.TableBuilder.setRecordMergeMode` and `setRecordMergeStrategyId`.
+Make the implementation available on the classpath of every writer, reader, and table-service process. Pass its class name through `HoodieWriteConfig.RECORD_MERGE_IMPL_CLASSES.key()` in the `TypedProperties` supplied to `HoodieJavaReadClient`.
+Do not change an existing table's merge strategy to obtain different query results: compaction and queries must agree on the same semantics.
+
+Full-schema null/default-value updates and physically partial-schema updates are different contracts. The latter require a custom merger implementing `partialMerge`; its default implementation throws `UnsupportedOperationException`.
+Custom implementations must preserve ordering and delete semantics. See [record merging](record_merger.md) for the interface contract, projection requirements, and configuration details.
+Out-of-order `IGNORE_DEFAULTS` updates currently have a known limitation: combining log patches before base rows can change which non-null value is retained. This shared buffered-merger behavior is separate from the Java API work; compaction-independent results for that combination are not guaranteed.
 
 Regular compaction and log compaction are separate table services. Scheduling produces a plan only when its eligibility criteria are met; execute and commit a scheduled plan through the Java table-service/write APIs.
 See [compaction](compaction.md), [clustering](clustering.md), [cleaning](cleaning.md), and [rollback](rollbacks.md) for the underlying table semantics.
@@ -111,9 +138,8 @@ The following boundaries remain:
 - The API returns merged records, not CDC events. CDC-enabled Java writes are discoverable through the shared CDC extractor, but this client has no CDC-output method.
 - Java bootstrap reads external files directly and does not support custom full-bootstrap input providers.
 
-### Payload transport compatibility
+### Legacy payload compatibility
 
-Schema-aware Avro payload decoding retains the writer schema for projections and supported schema evolution.
-Spark's registered Kryo transport retains its previous compact representation. Default non-Spark Kryo serialization includes the writer schema and requires an updated reader; older readers cannot decode that representation.
-Transports that supply the writer schema separately can select `BaseAvroPayload.useLegacyKryoFormat(kryo)`. That mode does not provide self-contained schema retention.
-Do not mix old and new default Kryo readers/writers without an explicit compatibility plan.
+Applications using `HoodieAvroRecord` and legacy payload implementations can still invoke payload decoding before native merging, or use a payload compatibility adapter for custom merging.
+Switching the table's merge mode alone does not migrate those input objects or fix writer/reader schema mismatches inside a payload.
+The native example above uses `HoodieAvroIndexedRecord` instead. Shared payload serialization changes are reviewed separately from this Java reader and do not define a prerequisite for its native-record path.
